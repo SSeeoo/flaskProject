@@ -12,12 +12,16 @@ import traceback
 import sys
 from Smart_feeder import control_motor, is_time_restricted
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import Column, Integer, Float, DateTime, String
+from sqlalchemy.ext.declarative import declarative_base
+from datetime import datetime
 
 # from decouple import config
 # from models import db, User
 # import pymysql
 # from sqlalchemy.ext.asyncio import AsyncSession
-# from datetime import datetime
+
+app = Flask(__name__)
 
 # SQLAlchemy 엔진 생성 로직을 함수로 분리
 def create_db_engine():
@@ -28,12 +32,43 @@ def create_db_engine():
                     f"{os.getenv('DB_NAME', 'feeder')}")
     return create_engine(database_uri)
 
-app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'secret')  # 환경변수에서 읽어옴
 engine = create_db_engine()  # 엔진 생성
 
+Base = declarative_base()
+
+# 데이터 모델 정의
+class SensorData(Base):
+    __tablename__ = 'sensor_data'
+
+    id = Column(Integer, primary_key=True)
+    temperature = Column(Float)
+    humidity = Column(Float)
+    weight = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+@app.route('/save_sensor_data', methods=['POST'])
+def save_sensor_data():
+    try:
+        # 요청으로부터 데이터를 받습니다.
+        temperature = float(request.form.get('temperature'))
+        humidity = float(request.form.get('humidity'))
+        weight = float(request.form.get('weight'))
+
+        # 데이터를 데이터베이스에 저장합니다.
+        data = SensorData(temperature=temperature, humidity=humidity, weight=weight)
+        with engine.connect() as conn:
+            conn.add(data)
+            conn.commit()
+
+        return "Data saved successfully", 200
+    except Exception as e:
+        return str(e), 400
+
+
 # 로그 설정
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+
 
 
 @app.route('/set_interval', methods=['POST'])
