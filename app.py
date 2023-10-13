@@ -12,7 +12,7 @@ import traceback
 import sys
 from Smart_feeder import control_motor, is_time_restricted
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import Column, Integer, Float, DateTime, String
+from sqlalchemy import Column, Integer, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timedelta
 from sqlalchemy.orm import sessionmaker
@@ -56,7 +56,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 @socketio.on('get_weight')
 def handle_weight():
     # 여기서 데이터베이스에서 최신 무게 데이터를 가져옵니다.
-    latest_weight = SensorData.query.order_by(SensorData.timestamp.desc()).first().weight
+    latest_weight = SensorData.query.order_by(SensorData.timestamp).first().weight
     socketio.emit('update_weight', {'weight': latest_weight})
 
 # 로그 설정
