@@ -12,7 +12,7 @@ import traceback
 import sys
 from Smart_feeder import control_motor, is_time_restricted
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import Column, Integer, Float, DateTime
+from sqlalchemy import Column, Integer, Float, DateTime, cast
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timedelta
 from sqlalchemy.orm import sessionmaker
@@ -39,6 +39,7 @@ app.secret_key = os.getenv('SECRET_KEY', 'secret')  # 환경변수에서 읽어�
 engine = create_db_engine()  # 엔진 생성
 
 Base = declarative_base()
+Base.metadata.create_all(engine) # 데이터베이스에 테이블 생성
 
 # 데이터 모델 정의
 class SensorData(Base):
@@ -249,13 +250,28 @@ def logout():
     session.pop('username', None)
     return redirect(url_for('login'))
 
+@app.route('/check_session')
+def check_session():
+    return f"Username in session: {session.get('username', 'Not set')}"
 
 @app.route('/dashboard')
 def dashboard():
+    # 세션에서 사용자 이름 가져오기
+    user = session.get('username', '')
+
     try:
         # 최근 24시간 동안의 데이터를 가져옵니다.
         past_24_hours = datetime.now() - timedelta(days=1)
-        sensor_data = SensorData.query.filter(SensorData.timestamp > past_24_hours).all()
+
+        # past_24_hours의 값을 콘솔에 출력합니다. ( 테스트용 )
+        print("Value of past_24_hours:", past_24_hours)
+        print("Type of past_24_hours:", type(past_24_hours))
+
+        # SQLAlchemy 세션을 사용하여 쿼리를 수행
+        Session = sessionmaker(bind=engine)
+        db_session = Session() # 이름 중복으로 db_session으로 변경
+        sensor_data = db_session.query(SensorData).filter(SensorData.timestamp > cast(past_24_hours, DateTime)).all()
+        db_session.close()
 
         # 데이터를 그래프에 사용할 수 있는 형식으로 변환합니다.
         timestamps = [data.timestamp.strftime('%Y-%m-%d %H:%M:%S') for data in sensor_data]
@@ -263,9 +279,12 @@ def dashboard():
         humidities = [data.humidity for data in sensor_data]
         weights = [data.weight for data in sensor_data]
 
-        return render_template('dashboard.html', timestamps=timestamps, temperatures=temperatures, humidities=humidities, weights=weights)
+        return render_template('dashboard.html', user=user, timestamps=timestamps, temperatures=temperatures, humidities=humidities, weights=weights)
     except Exception as e:
+        logging.error(f"Error in /dashboard: {e}")  # 오류 메시지를 로깅합니다.
+        logging.error(traceback.format_exc())  # 트레이스백을 로깅합니다.
         return str(e), 400
+
 
 @app.route('/get_graph_data', methods=['POST'])
 def get_graph_data():
@@ -370,8 +389,7 @@ def control_motor_endpoint():
     force = request.json.get('force', False)
     timer = request.json.get('timer', 0)
 
-    # 시간 제한이 있는 경우와 force가 True인 경우를 확인합니다.
-    if is_time_restricted(1) and not force: # user_id: 1로 임시 설정
+    if is_time_restricted(1) and not force:  # user_id: 1로 임시 설정
         return {'status': 'error', 'message': 'Restricted time'}, 403
 
     # 모터 작동 로직
@@ -399,10 +417,11 @@ def get_feed_history():
 def favicon():
     return app.send_static_file('favicon.ico')
 
+
 # Socket.io 이벤트 핸들러
 @socketio.on('connect')
-def connect(sid, environ):
-    print('Connected', sid)
+def connect():
+    print('Connected')
 
 @socketio.on('disconnect')
 def disconnect(sid):

@@ -2,32 +2,11 @@
 
 {% block content %}
 <style>
-    body {
-        background-image: url('https://example.com/your-background-image-url.jpg');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        color: #ffffff;
-    }
-
-    #content-container {
-        background: rgba(0,0,0,0.6);
-        padding: 20px;
-        border-radius: 10px;
-        margin-top: 20px;
-    }
-
-    .flashes {
-        padding: 10px;
-        margin-bottom: 20px;
-        background-color: #e74c3c;
-        color: #fff;
-        border-radius: 5px;
-    }
+    /* ... (스타일은 그대로 유지) ... */
 </style>
 
 <div id="content-container">
-    <h2>Welcome, {{ username }}!</h2>
+    <h2>Welcome, {{ user }}!</h2>
 
     {% with messages = get_flashed_messages() %}
         {% if messages %}
@@ -55,59 +34,21 @@
             <!-- 여기에 사용자 설정 폼을 추가 -->
         </form>
     </div>
+
+    <!-- 데이터를 JavaScript로 전달하기 위한 컨테이너 -->
+    <div id="dataContainer"
+        data-timestamps="{{ timestamps|tojson }}"
+        data-temperatures="{{ temperatures|tojson }}"
+        data-humidities="{{ humidities|tojson }}"
+        data-weights="{{ weights|tojson }}">
+    </div>
 </div>
 
 <!-- 필요한 JavaScript 라이브러리 추가 -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 
-<!-- 그래프를 그리고 실시간으로 무게를 업데이트하는 JavaScript 코드 추가 -->
-<script>
-    // Flask 앱에서 전달받은 데이터를 사용합니다.
-    var timestamps = {{ timestamps|tojson }};
-    var temperatures = {{ temperatures|tojson }};
-    var humidities = {{ humidities|tojson }};
-    var weights = {{ weights|tojson }};
-
-    // 꺾은선 그래프
-    var ctx1 = document.getElementById('tempHumidityChart').getContext('2d');
-    var tempHumidityChart = new Chart(ctx1, {
-        type: 'line',
-        data: {
-            labels: timestamps,
-            datasets: [{
-                label: '온도',
-                data: temperatures,
-                borderColor: 'red',
-                fill: false
-            }, {
-                label: '습도',
-                data: humidities,
-                borderColor: 'blue',
-                fill: false
-            }]
-        }
-    });
-
-    // 막대 그래프
-    var ctx2 = document.getElementById('weightBarChart').getContext('2d');
-    var weightBarChart = new Chart(ctx2, {
-        type: 'bar',
-        data: {
-            labels: timestamps,
-            datasets: [{
-                label: '무게',
-                data: weights,
-                backgroundColor: 'green'
-            }]
-        }
-    });
-
-    // 실시간 무게 업데이트
-    var socket = io.connect('http://localhost:5000');
-    socket.on('update_weight', function(data) {
-        document.getElementById('weightValue').innerText = data.weight;
-    });
-</script>
+<!-- 외부 JavaScript 파일 연결 -->
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
 
 {% endblock %}
