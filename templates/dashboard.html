@@ -3,15 +3,15 @@
 {% block content %}
 <style>
     body {
-        background-image: url('https://example.com/your-background-image-url.jpg'); /* 이 URL을 원하는 이미지 URL로 바꾸세요 */
+        background-image: url('https://example.com/your-background-image-url.jpg');
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
-        color: #ffffff; /* 글자색을 변경할 수 있습니다. 이 코드는 글자색을 하얀색으로 설정합니다. */
+        color: #ffffff;
     }
 
     #content-container {
-        background: rgba(0,0,0,0.6); /* 배경이 어둡게 보이도록 설정합니다. */
+        background: rgba(0,0,0,0.6);
         padding: 20px;
         border-radius: 10px;
         margin-top: 20px;
@@ -39,8 +39,11 @@
         {% endif %}
     {% endwith %}
 
+    <!-- 꺾은선 그래프와 막대 그래프를 표시할 canvas 요소 추가 -->
     <div id="graph-container">
-        {{ graph_html|safe }}
+        <canvas id="tempHumidityChart"></canvas>
+        <canvas id="weightBarChart"></canvas>
+        <div id="realtimeWeight">실시간 무게: <span id="weightValue"></span></div>
     </div>
 
     <div id="table-container">
@@ -53,4 +56,58 @@
         </form>
     </div>
 </div>
+
+<!-- 필요한 JavaScript 라이브러리 추가 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+<!-- 그래프를 그리고 실시간으로 무게를 업데이트하는 JavaScript 코드 추가 -->
+<script>
+    // Flask 앱에서 전달받은 데이터를 사용합니다.
+    var timestamps = {{ timestamps|tojson }};
+    var temperatures = {{ temperatures|tojson }};
+    var humidities = {{ humidities|tojson }};
+    var weights = {{ weights|tojson }};
+
+    // 꺾은선 그래프
+    var ctx1 = document.getElementById('tempHumidityChart').getContext('2d');
+    var tempHumidityChart = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: timestamps,
+            datasets: [{
+                label: '온도',
+                data: temperatures,
+                borderColor: 'red',
+                fill: false
+            }, {
+                label: '습도',
+                data: humidities,
+                borderColor: 'blue',
+                fill: false
+            }]
+        }
+    });
+
+    // 막대 그래프
+    var ctx2 = document.getElementById('weightBarChart').getContext('2d');
+    var weightBarChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: timestamps,
+            datasets: [{
+                label: '무게',
+                data: weights,
+                backgroundColor: 'green'
+            }]
+        }
+    });
+
+    // 실시간 무게 업데이트
+    var socket = io.connect('http://localhost:5000');
+    socket.on('update_weight', function(data) {
+        document.getElementById('weightValue').innerText = data.weight;
+    });
+</script>
+
 {% endblock %}
