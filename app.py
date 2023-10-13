@@ -14,14 +14,16 @@ from Smart_feeder import control_motor, is_time_restricted
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import Column, Integer, Float, DateTime, String
 from sqlalchemy.ext.declarative import declarative_base
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import sessionmaker
+from flask_socketio import SocketIO
 
 # from decouple import config
 # from models import db
 # import pymysql
 # from sqlalchemy.ext.asyncio import AsyncSession
 
+# Flask 앱 및 SQLAlchemy 엔진 설정
 app = Flask(__name__)
 
 # SQLAlchemy 엔진 생성 로직을 함수로 분리
@@ -48,7 +50,21 @@ class SensorData(Base):
     weight = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+# Socket.io 설정
+socketio = SocketIO(app)
+sio = socketio.Server(cors_allowed_origins="*")
+app.wsgi_app = socketio.WSGIApp(sio, app.wsgi_app)
 
+@socketio.on('get_weight')
+def handle_weight():
+    # 여기서 데이터베이스에서 최신 무게 데이터를 가져옵니다.
+    latest_weight = Data.query.order_by(Data.date.desc()).first().weight
+    socketio.emit('update_weight', {'weight': latest_weight})
+
+# 로그 설정
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+
+# Flask 라우트 정의
 @app.route('/save_sensor_data', methods=['POST'])
 def save_sensor_data():
     try:
@@ -70,10 +86,6 @@ def save_sensor_data():
         return "Data saved successfully", 200
     except Exception as e:
         return str(e), 400
-
-
-# 로그 설정
-logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
 @app.route('/set_interval', methods=['POST'])
 def set_interval():
@@ -242,10 +254,20 @@ def logout():
 
 @app.route('/dashboard')
 def dashboard():
-    if 'username' not in session:  # 세션에 username이 존재하지 않으면 /login으로 리다이렉트
-        return redirect(url_for('login'))
-    return render_template('dashboard.html',username=session['username'])  # username이 존재하면 dashboard.html 렌더링
+    try:
+        # 최근 24시간 동안의 데이터를 가져옵니다.
+        past_24_hours = datetime.now() - timedelta(days=1)
+        sensor_data = SensorData.query.filter(SensorData.timestamp > past_24_hours).all()
 
+        # 데이터를 그래프에 사용할 수 있는 형식으로 변환합니다.
+        timestamps = [data.timestamp.strftime('%Y-%m-%d %H:%M:%S') for data in sensor_data]
+        temperatures = [data.temperature for data in sensor_data]
+        humidities = [data.humidity for data in sensor_data]
+        weights = [data.weight for data in sensor_data]
+
+        return render_template('dashboard.html', timestamps=timestamps, temperatures=temperatures, humidities=humidities, weights=weights)
+    except Exception as e:
+        return str(e), 400
 
 @app.route('/get_graph_data', methods=['POST'])
 def get_graph_data():
@@ -375,10 +397,23 @@ def get_feed_history():
         logging.error(f"Error fetching feed history: {e}")
         return jsonify(status='error', message=str(e)), 500
 
-
 @app.route('/favicon.ico')
 def favicon():
     return app.send_static_file('favicon.ico')
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0',debug=True, port=5000)
+# Socket.io 이벤트 핸들러
+@sio.on('connect')
+def connect(sid, environ):
+    print('Connected', sid)
+
+@sio.on('disconnect')
+def disconnect(sid):
+    print('Disconnected', sid)
+
+@sio.on('update_weight')
+def update_weight(sid, data):
+    sio.emit('update_weight', {'weight': data['weight']}, room=sid)
+
+# Flask 앱 실행
+if __name__ == '__main__':
+    sio.run(app, host='0.0.0.0', port=5000, debug=True)
