@@ -51,14 +51,12 @@ class SensorData(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 # Socket.io 설정
-socketio = SocketIO(app)
-sio = socketio.Server(cors_allowed_origins="*")
-app.wsgi_app = socketio.WSGIApp(sio, app.wsgi_app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 @socketio.on('get_weight')
 def handle_weight():
     # 여기서 데이터베이스에서 최신 무게 데이터를 가져옵니다.
-    latest_weight = Data.query.order_by(Data.date.desc()).first().weight
+    latest_weight = SensorData.query.order_by(SensorData.timestamp.desc()).first().weight
     socketio.emit('update_weight', {'weight': latest_weight})
 
 # 로그 설정
@@ -402,18 +400,18 @@ def favicon():
     return app.send_static_file('favicon.ico')
 
 # Socket.io 이벤트 핸들러
-@sio.on('connect')
+@socketio.on('connect')
 def connect(sid, environ):
     print('Connected', sid)
 
-@sio.on('disconnect')
+@socketio.on('disconnect')
 def disconnect(sid):
     print('Disconnected', sid)
 
-@sio.on('update_weight')
+@socketio.on('update_weight')
 def update_weight(sid, data):
-    sio.emit('update_weight', {'weight': data['weight']}, room=sid)
+    socketio.emit('update_weight', {'weight': data['weight']}, room=sid)
 
 # Flask 앱 실행
 if __name__ == '__main__':
-    sio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
